@@ -1,0 +1,17 @@
+/vendor/
+/data/*.sqlite
+/data/*.sqlite-journal
+/data/*.sqlite-wal
+/data/*.sqlite-shm
+/data/.stop
+/data/.lock
+/data/logs/*.log
+/tmp/*
+!/tmp/.gitkeep
+/.htpasswd
+.env
+.env.local
+.DS_Store
+.idea/
+.vscode/
+.claude/settings.local.json

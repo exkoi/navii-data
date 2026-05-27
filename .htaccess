@@ -1,0 +1,30 @@
+# Navii Data Scraper - Apache config for shared hosting (Xserver等)
+#
+# 1) Basic 認証でプロジェクトルート以下を保護
+# 2) 機密ファイルへの直アクセスを deny（保険）
+# 3) .git や .claude などの隠しディレクトリへのアクセスを 404
+# 4) index.php をデフォルトに
+#
+# 注意: AuthUserFile の絶対パスはサーバー環境ごとに書き換えること。
+#      Xserver では通常 /home/<account>/<domain>/public_html/navii-data/.htpasswd のような形になる。
+
+AuthType Basic
+AuthName "Navii Data Scraper"
+AuthUserFile /CHANGE_ME/navii-data/.htpasswd
+Require valid-user
+
+<FilesMatch "\.(sqlite|sqlite-journal|sqlite-wal|sqlite-shm|htpasswd|htaccess|env|log|lock|stop)$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+RedirectMatch 404 /\.git
+RedirectMatch 404 /\.claude
+
+DirectoryIndex index.php
+
+# UTF-8 でレスポンス（一部のレンタルでデフォルト Shift_JIS の場合がある）
+AddDefaultCharset UTF-8
