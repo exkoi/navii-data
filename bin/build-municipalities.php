@@ -59,7 +59,7 @@ curl_setopt_array($ch, [
 $body = curl_exec($ch);
 $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $err = curl_error($ch);
-curl_close($ch);
+// curl_close は PHP 8.0+ で no-op、8.5+ では Deprecated 警告が出るので呼ばない。
 
 if ($body === false || $status !== 200) {
     fwrite(STDERR, "SPARQL failed: status={$status} err={$err}\n");
