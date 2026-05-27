@@ -58,7 +58,7 @@ final class Logger
             return;
         }
         $stmt = $this->pdo->prepare(
-            'INSERT INTO fetch_log (url, http_status, bytes, duration_ms, user_agent, error)
+            'INSERT INTO state.fetch_log (url, http_status, bytes, duration_ms, user_agent, error)
              VALUES (:url, :status, :bytes, :duration, :ua, :error)'
         );
         $stmt->execute([

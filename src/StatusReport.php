@@ -70,7 +70,7 @@ final class StatusReport
                     SUM(CASE WHEN status = "error" THEN 1 ELSE 0 END) AS error_pages,
                     MAX(page) AS max_page_seen,
                     MAX(fetched_at) AS last_fetched_at
-             FROM list_progress
+             FROM state.list_progress
              GROUP BY pref_cd
              ORDER BY pref_cd'
         )->fetchAll();
@@ -100,7 +100,7 @@ final class StatusReport
     {
         $stmt = $this->pdo->prepare(
             'SELECT fetched_at, http_status, bytes, duration_ms, url, error
-             FROM fetch_log
+             FROM state.fetch_log
              ORDER BY id DESC
              LIMIT :lim'
         );

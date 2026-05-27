@@ -28,7 +28,7 @@ if (!file_exists($config['db_path'])) {
 }
 
 try {
-    $pdo = Db::open($config['db_path'], readOnly: true);
+    $pdo = Db::open($config['db_path'], readOnly: true, stateDbPath: $config['state_db_path']);
 } catch (Throwable $e) {
     http_response_code(500);
     echo '<!doctype html><meta charset="utf-8"><title>Navii Data Scraper</title>';

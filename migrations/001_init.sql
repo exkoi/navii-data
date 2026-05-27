@@ -2,6 +2,7 @@ PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
 -- 施設マスター（1施設1レコード、最新HTMLを raw BLOB で保持）
+-- このDBは配布物そのものなので、運用メタ（list_progress / fetch_log）は state DB 側に置く。
 CREATE TABLE IF NOT EXISTS facilities (
   kikan_cd        TEXT NOT NULL,
   pref_cd         TEXT NOT NULL,
@@ -29,28 +30,3 @@ CREATE TABLE IF NOT EXISTS facilities (
 );
 CREATE INDEX IF NOT EXISTS idx_facilities_pref   ON facilities(pref_cd);
 CREATE INDEX IF NOT EXISTS idx_facilities_status ON facilities(status, next_attempt_at);
-
--- 一覧ページ取得の進捗。URL の page パラメータは 0 オリジン（page=0 が1ページ目）。
-CREATE TABLE IF NOT EXISTS list_progress (
-  pref_cd        TEXT NOT NULL,
-  page           INTEGER NOT NULL,
-  http_status    INTEGER,
-  total_count    INTEGER,
-  facility_count INTEGER,
-  fetched_at     TEXT,
-  status         TEXT NOT NULL DEFAULT 'pending',
-  PRIMARY KEY (pref_cd, page)
-);
-
--- 監査ログ
-CREATE TABLE IF NOT EXISTS fetch_log (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  url         TEXT NOT NULL,
-  http_status INTEGER,
-  bytes       INTEGER,
-  duration_ms INTEGER,
-  user_agent  TEXT,
-  fetched_at  TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),
-  error       TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_fetch_log_fetched_at ON fetch_log(fetched_at DESC);

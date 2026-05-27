@@ -17,7 +17,7 @@ if (!file_exists($config['db_path'])) {
     exit(1);
 }
 
-$pdo = Db::open($config['db_path'], readOnly: true);
+$pdo = Db::open($config['db_path'], readOnly: true, stateDbPath: $config['state_db_path']);
 $report = (new StatusReport($pdo, $config))->collect();
 
 echo "=== Navii Data Scraper Status ===\n";

@@ -15,6 +15,7 @@ return [
     'target_kbns'     => array_filter(explode(',', (string)(getenv('NAVII_TARGET_KBNS') ?: '2'))),
 
     'db_path'         => dirname(__DIR__) . '/data/navii.sqlite',
+    'state_db_path'   => dirname(__DIR__) . '/data/navii-state.sqlite',
     'stop_file'       => dirname(__DIR__) . '/data/.stop',
     'lock_file'       => dirname(__DIR__) . '/data/.lock',
     'log_dir'         => dirname(__DIR__) . '/data/logs',

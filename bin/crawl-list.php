@@ -28,7 +28,7 @@ if (file_exists($config['stop_file'])) {
     exit(0);
 }
 
-$pdo = Db::open($config['db_path']);
+$pdo = Db::open($config['db_path'], stateDbPath: $config['state_db_path']);
 $logger->attachPdo($pdo);
 
 $breaker = new CircuitBreaker($config['stop_file'], $config['circuit_breaker_threshold'], $logger);
@@ -120,7 +120,7 @@ function pickNextListJob(PDO $pdo, array $targetPrefs): ?array
 {
     // 各 pref で page=0 がまだ done でないなら最優先（total_count を把握するため）
     foreach ($targetPrefs as $pref) {
-        $row = $pdo->prepare('SELECT status FROM list_progress WHERE pref_cd = :p AND page = 0');
+        $row = $pdo->prepare('SELECT status FROM state.list_progress WHERE pref_cd = :p AND page = 0');
         $row->execute([':p' => $pref]);
         $r = $row->fetch();
         if (!$r || $r['status'] !== 'done') {
@@ -132,7 +132,7 @@ function pickNextListJob(PDO $pdo, array $targetPrefs): ?array
     foreach ($targetPrefs as $pref) {
         $stmt = $pdo->prepare(
             'SELECT total_count, MAX(page) AS last_page
-             FROM list_progress
+             FROM state.list_progress
              WHERE pref_cd = :p AND status = "done"'
         );
         $stmt->execute([':p' => $pref]);
@@ -162,11 +162,11 @@ function upsertListProgress(
     string $status,
 ): void {
     $stmt = $pdo->prepare(
-        'INSERT INTO list_progress (pref_cd, page, http_status, total_count, facility_count, fetched_at, status)
+        'INSERT INTO state.list_progress (pref_cd, page, http_status, total_count, facility_count, fetched_at, status)
          VALUES (:p, :pg, :st, :tc, :fc, datetime("now", "+9 hours"), :s)
          ON CONFLICT(pref_cd, page) DO UPDATE SET
            http_status = excluded.http_status,
-           total_count = COALESCE(excluded.total_count, list_progress.total_count),
+           total_count = COALESCE(excluded.total_count, state.list_progress.total_count),
            facility_count = excluded.facility_count,
            fetched_at = excluded.fetched_at,
            status = excluded.status'

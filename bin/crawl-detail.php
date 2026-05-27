@@ -28,7 +28,7 @@ if (file_exists($config['stop_file'])) {
     exit(0);
 }
 
-$pdo = Db::open($config['db_path']);
+$pdo = Db::open($config['db_path'], stateDbPath: $config['state_db_path']);
 $logger->attachPdo($pdo);
 
 $breaker = new CircuitBreaker($config['stop_file'], $config['circuit_breaker_threshold'], $logger);

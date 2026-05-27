@@ -11,7 +11,7 @@ final class Db
 {
     private function __construct() {}
 
-    public static function open(string $path, bool $readOnly = false): PDO
+    public static function open(string $path, bool $readOnly = false, ?string $stateDbPath = null): PDO
     {
         if (!$readOnly && !is_dir(dirname($path))) {
             if (!@mkdir(dirname($path), 0775, true) && !is_dir(dirname($path))) {
@@ -44,7 +44,31 @@ final class Db
             $pdo->exec('PRAGMA query_only = ON');
         }
 
+        if ($stateDbPath !== null) {
+            self::attachState($pdo, $stateDbPath, $readOnly);
+        }
+
         return $pdo;
+    }
+
+    public static function attachState(PDO $pdo, string $stateDbPath, bool $readOnly = false): void
+    {
+        if (!$readOnly && !is_dir(dirname($stateDbPath))) {
+            if (!@mkdir(dirname($stateDbPath), 0775, true) && !is_dir(dirname($stateDbPath))) {
+                throw new RuntimeException('failed to create state DB directory: ' . dirname($stateDbPath));
+            }
+        }
+        if ($readOnly && !file_exists($stateDbPath)) {
+            throw new RuntimeException('state DB file not found for read-only attach: ' . $stateDbPath);
+        }
+
+        $escaped = str_replace("'", "''", $stateDbPath);
+        $pdo->exec("ATTACH DATABASE '{$escaped}' AS state");
+
+        if (!$readOnly) {
+            $pdo->exec('PRAGMA state.journal_mode = WAL');
+            $pdo->exec('PRAGMA state.synchronous = NORMAL');
+        }
     }
 
     public static function migrate(PDO $pdo, string $migrationsDir): void

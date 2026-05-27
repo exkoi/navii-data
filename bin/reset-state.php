@@ -12,14 +12,14 @@ $config = require __DIR__ . '/../config/config.php';
 
 $args = array_slice($argv, 1);
 if (!in_array('--yes', $args, true)) {
-    fwrite(STDERR, "danger: this wipes facilities/detail_state/detail_snapshots/list_progress/fetch_log.\n");
+    fwrite(STDERR, "danger: this wipes facilities/list_progress/fetch_log.\n");
     fwrite(STDERR, "rerun with --yes to confirm. usage: php bin/reset-state.php --yes [--keep-snapshots]\n");
     exit(1);
 }
 
 $keepHtml = in_array('--keep-html', $args, true);
 
-$pdo = Db::open($config['db_path']);
+$pdo = Db::open($config['db_path'], stateDbPath: $config['state_db_path']);
 $pdo->beginTransaction();
 try {
     if ($keepHtml) {
@@ -30,8 +30,8 @@ try {
     } else {
         $pdo->exec('DELETE FROM facilities');
     }
-    $pdo->exec('DELETE FROM list_progress');
-    $pdo->exec('DELETE FROM fetch_log');
+    $pdo->exec('DELETE FROM state.list_progress');
+    $pdo->exec('DELETE FROM state.fetch_log');
     $pdo->commit();
 } catch (Throwable $e) {
     $pdo->rollBack();
