@@ -48,13 +48,15 @@ foreach ($report['status_breakdown'] as $r) {
     printf("  %-10s : %d\n", $r['status'], $r['count']);
 }
 
-echo "\n[list_progress]\n";
+echo "\n[list_progress (per pref)]\n";
 foreach ($report['list_progress'] as $r) {
-    printf("  %s (%s) total=%s done=%s error=%s max_page=%s last=%s\n",
-        $r['pref_cd'], PrefMap::prefName((string)$r['pref_cd']),
-        $r['total_count'] ?? 'null',
-        $r['done_pages'], $r['error_pages'],
-        $r['max_page_seen'] ?? 'null',
+    printf("  %s (%s) munis=%s/%s done_pages=%s error_pages=%s last=%s\n",
+        $r['pref_cd'],
+        $r['pref_name'] ?? PrefMap::prefName((string)$r['pref_cd']),
+        $r['munis_started'] ?? 0,
+        $r['munis_total'] ?? 0,
+        $r['done_pages'] ?? 0,
+        $r['error_pages'] ?? 0,
         $r['last_fetched_at'] ?? 'null',
     );
 }

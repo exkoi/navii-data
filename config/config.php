@@ -14,6 +14,10 @@ return [
     'target_prefs'    => array_filter(explode(',', (string)(getenv('NAVII_TARGET_PREFS') ?: '13'))),
     'target_kbns'     => array_filter(explode(',', (string)(getenv('NAVII_TARGET_KBNS') ?: '2'))),
 
+    // 一覧検索パラメータ
+    'list_local_only' => (string)(getenv('NAVII_LOCAL_ONLY') ?: '1'),  // lo 先頭1桁: 1=その自治体のみ, 0=周辺含む
+    'list_sort_no'    => (string)(getenv('NAVII_SORT_NO') ?: '1'),     // 1=施設名称の50音順
+
     'db_path'         => dirname(__DIR__) . '/data/navii.sqlite',
     'state_db_path'   => dirname(__DIR__) . '/data/navii-state.sqlite',
     'stop_file'       => dirname(__DIR__) . '/data/.stop',

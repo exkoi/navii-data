@@ -99,23 +99,22 @@ $stop = $report['stop_file'];
     </table>
 <?php endif; ?>
 
-<h2>list_progress</h2>
+<h2>list_progress (per pref)</h2>
 <?php if (!$report['list_progress']): ?>
     <p>(no list_progress yet)</p>
 <?php else: ?>
     <table border="1" cellpadding="4">
         <tr>
-            <th>pref_cd</th><th>pref</th><th>total_count</th>
-            <th>done_pages</th><th>error_pages</th><th>max_page_seen</th><th>last_fetched_at</th>
+            <th>pref_cd</th><th>pref</th><th>munis_started / munis_total</th>
+            <th>done_pages</th><th>error_pages</th><th>last_fetched_at</th>
         </tr>
         <?php foreach ($report['list_progress'] as $r): ?>
             <tr>
                 <td><?= h($r['pref_cd']) ?></td>
-                <td><?= h(PrefMap::prefName((string)$r['pref_cd'])) ?></td>
-                <td><?= h($r['total_count'] ?? '') ?></td>
-                <td><?= h($r['done_pages']) ?></td>
-                <td><?= h($r['error_pages']) ?></td>
-                <td><?= h($r['max_page_seen'] ?? '') ?></td>
+                <td><?= h($r['pref_name'] ?? PrefMap::prefName((string)$r['pref_cd'])) ?></td>
+                <td><?= h($r['munis_started'] ?? 0) ?> / <?= h($r['munis_total'] ?? 0) ?></td>
+                <td><?= h($r['done_pages'] ?? 0) ?></td>
+                <td><?= h($r['error_pages'] ?? 0) ?></td>
                 <td><?= h($r['last_fetched_at'] ?? '') ?></td>
             </tr>
         <?php endforeach; ?>

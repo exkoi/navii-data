@@ -64,15 +64,18 @@ final class StatusReport
     private function listProgress(): array
     {
         return $this->pdo->query(
-            'SELECT pref_cd,
-                    MAX(total_count) AS total_count,
-                    SUM(CASE WHEN status = "done" THEN 1 ELSE 0 END) AS done_pages,
-                    SUM(CASE WHEN status = "error" THEN 1 ELSE 0 END) AS error_pages,
-                    MAX(page) AS max_page_seen,
-                    MAX(fetched_at) AS last_fetched_at
-             FROM state.list_progress
-             GROUP BY pref_cd
-             ORDER BY pref_cd'
+            'SELECT m.pref_cd,
+                    m.pref_name,
+                    COUNT(DISTINCT lp.lo) AS munis_started,
+                    (SELECT COUNT(*) FROM state.municipalities
+                       WHERE pref_cd = m.pref_cd AND admin_class != "DesignatedCity") AS munis_total,
+                    SUM(CASE WHEN lp.status = "done" THEN 1 ELSE 0 END) AS done_pages,
+                    SUM(CASE WHEN lp.status = "error" THEN 1 ELSE 0 END) AS error_pages,
+                    MAX(lp.fetched_at) AS last_fetched_at
+             FROM state.list_progress lp
+             JOIN state.municipalities m ON m.lo = lp.lo
+             GROUP BY m.pref_cd, m.pref_name
+             ORDER BY m.pref_cd'
         )->fetchAll();
     }
 

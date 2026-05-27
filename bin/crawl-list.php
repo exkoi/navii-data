@@ -51,22 +51,23 @@ if (!$targetPrefs) {
 
 $next = pickNextListJob($pdo, $targetPrefs);
 if ($next === null) {
-    $logger->info('all target prefs completed for known pages');
+    $logger->info('all target municipalities completed for known pages');
     exit(0);
 }
 
-[$prefCd, $page] = $next;
-$logger->info("fetch list pref={$prefCd} page={$page}");
+[$lo, $page, $loName] = $next;
+$logger->info("fetch list lo={$lo} ({$loName}) page={$page}");
 
 try {
     $result = $http->get($config['list_path'], [
-        'sjk'  => $config['list_sjk'],
-        'jc'   => $config['list_jc'],
-        'pref' => $prefCd,
-        'page' => $page,
+        'sortNo' => $config['list_sort_no'],
+        'sjk'    => $config['list_sjk'],
+        'jc'     => $config['list_jc'],
+        'lo'     => $lo,
+        'page'   => $page,
     ]);
 } catch (Throwable $e) {
-    upsertListProgress($pdo, $prefCd, $page, null, null, null, 'error');
+    upsertListProgress($pdo, $lo, $page, null, null, null, 'error');
     $logger->error('fetch failed: ' . $e->getMessage());
     exit(1);
 }
@@ -82,20 +83,29 @@ $logger->info(sprintf(
 
 $pdo->beginTransaction();
 try {
-    // 新規施設は status='pending' で挿入、既存施設は last_seen_at を更新するだけ。
+    // 新規施設は status='pending' で挿入、既存施設は last_seen_at と code5 を更新。
+    // code5 はクロール起点 lo の後5桁。同一施設が別 lo で再ヒットしたら最後の値で上書き。
+    $code5 = substr($lo, 1);
     $upsertFacility = $pdo->prepare(
-        'INSERT INTO facilities (kikan_cd, pref_cd, kikan_kbn, first_seen_at, last_seen_at, status)
-         VALUES (:cd, :pref, :kbn, datetime("now", "+9 hours"), datetime("now", "+9 hours"), "pending")
-         ON CONFLICT(kikan_cd, pref_cd, kikan_kbn) DO UPDATE SET last_seen_at = datetime("now", "+9 hours")'
+        'INSERT INTO facilities (kikan_cd, pref_cd, kikan_kbn, code5, first_seen_at, last_seen_at, status)
+         VALUES (:cd, :pref, :kbn, :code5, datetime("now", "+9 hours"), datetime("now", "+9 hours"), "pending")
+         ON CONFLICT(kikan_cd, pref_cd, kikan_kbn) DO UPDATE SET
+           last_seen_at = datetime("now", "+9 hours"),
+           code5        = excluded.code5'
     );
 
     foreach ($parsed['facilities'] as $f) {
-        $upsertFacility->execute([':cd' => $f['kikan_cd'], ':pref' => $f['pref_cd'], ':kbn' => $f['kikan_kbn']]);
+        $upsertFacility->execute([
+            ':cd'    => $f['kikan_cd'],
+            ':pref'  => $f['pref_cd'],
+            ':kbn'   => $f['kikan_kbn'],
+            ':code5' => $code5,
+        ]);
     }
 
     upsertListProgress(
         $pdo,
-        $prefCd,
+        $lo,
         $page,
         $result['status'],
         $parsed['total_count'],
@@ -110,42 +120,63 @@ try {
     exit(1);
 }
 
-$logger->info("done pref={$prefCd} page={$page} stored=" . count($parsed['facilities']));
+$logger->info("done lo={$lo} ({$loName}) page={$page} stored=" . count($parsed['facilities']));
 
 /**
+ * 次にクロールすべき (lo, page, name) を選ぶ。target_prefs に含まれる都道府県の
+ * 市区町村のうち、DesignatedCity（政令市の親、ナビイでは無効）を除外。
+ *
+ * 優先順:
+ *  1. まだ page=0 を取得していない lo（total_count を把握するため）
+ *  2. page=0 の total_count から計算した max_page まで未到達の lo
+ *
  * @param list<string> $targetPrefs
- * @return array{0:string,1:int}|null
+ * @return array{0:string,1:int,2:string}|null
  */
 function pickNextListJob(PDO $pdo, array $targetPrefs): ?array
 {
-    // 各 pref で page=0 がまだ done でないなら最優先（total_count を把握するため）
-    foreach ($targetPrefs as $pref) {
-        $row = $pdo->prepare('SELECT status FROM state.list_progress WHERE pref_cd = :p AND page = 0');
-        $row->execute([':p' => $pref]);
-        $r = $row->fetch();
-        if (!$r || $r['status'] !== 'done') {
-            return [$pref, 0];
+    $placeholders = implode(',', array_fill(0, count($targetPrefs), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT lo, name FROM state.municipalities
+         WHERE pref_cd IN ({$placeholders})
+           AND admin_class != 'DesignatedCity'
+         ORDER BY code5"
+    );
+    $stmt->execute(array_values($targetPrefs));
+    $munis = $stmt->fetchAll();
+
+    if (!$munis) {
+        return null;
+    }
+
+    // 1. page=0 がまだ done でない lo を優先
+    $checkP0 = $pdo->prepare('SELECT status FROM state.list_progress WHERE lo = :lo AND page = 0');
+    foreach ($munis as $m) {
+        $checkP0->execute([':lo' => $m['lo']]);
+        $row = $checkP0->fetch();
+        if (!$row || $row['status'] !== 'done') {
+            return [(string)$m['lo'], 0, (string)$m['name']];
         }
     }
 
-    // 各 pref について、次の未取得ページを選ぶ
-    foreach ($targetPrefs as $pref) {
-        $stmt = $pdo->prepare(
-            'SELECT total_count, MAX(page) AS last_page
-             FROM state.list_progress
-             WHERE pref_cd = :p AND status = "done"'
-        );
-        $stmt->execute([':p' => $pref]);
-        $row = $stmt->fetch();
+    // 2. 各 lo について、次の未取得ページを選ぶ
+    $perPage = 20;
+    $progress = $pdo->prepare(
+        'SELECT total_count, MAX(page) AS last_page
+         FROM state.list_progress
+         WHERE lo = :lo AND status = "done"'
+    );
+    foreach ($munis as $m) {
+        $progress->execute([':lo' => $m['lo']]);
+        $row = $progress->fetch();
         if (!$row || $row['last_page'] === null) {
-            return [$pref, 0];
+            return [(string)$m['lo'], 0, (string)$m['name']];
         }
         $total = (int)($row['total_count'] ?? 0);
         $lastPage = (int)$row['last_page'];
-        $perPage = 20;
         $maxPage = $total > 0 ? (int)floor(($total - 1) / $perPage) : 0;
         if ($lastPage < $maxPage) {
-            return [$pref, $lastPage + 1];
+            return [(string)$m['lo'], $lastPage + 1, (string)$m['name']];
         }
     }
 
@@ -154,7 +185,7 @@ function pickNextListJob(PDO $pdo, array $targetPrefs): ?array
 
 function upsertListProgress(
     PDO $pdo,
-    string $prefCd,
+    string $lo,
     int $page,
     ?int $httpStatus,
     ?int $totalCount,
@@ -162,9 +193,9 @@ function upsertListProgress(
     string $status,
 ): void {
     $stmt = $pdo->prepare(
-        'INSERT INTO state.list_progress (pref_cd, page, http_status, total_count, facility_count, fetched_at, status)
-         VALUES (:p, :pg, :st, :tc, :fc, datetime("now", "+9 hours"), :s)
-         ON CONFLICT(pref_cd, page) DO UPDATE SET
+        'INSERT INTO state.list_progress (lo, page, http_status, total_count, facility_count, fetched_at, status)
+         VALUES (:lo, :pg, :st, :tc, :fc, datetime("now", "+9 hours"), :s)
+         ON CONFLICT(lo, page) DO UPDATE SET
            http_status = excluded.http_status,
            total_count = COALESCE(excluded.total_count, state.list_progress.total_count),
            facility_count = excluded.facility_count,
@@ -172,7 +203,7 @@ function upsertListProgress(
            status = excluded.status'
     );
     $stmt->execute([
-        ':p'  => $prefCd,
+        ':lo' => $lo,
         ':pg' => $page,
         ':st' => $httpStatus,
         ':tc' => $totalCount,
