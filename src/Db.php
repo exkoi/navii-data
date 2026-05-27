@@ -30,7 +30,15 @@ final class Db
             if (!file_exists($path)) {
                 throw new RuntimeException('DB file not found for read-only open: ' . $path);
             }
-            $options[PDO::SQLITE_ATTR_OPEN_FLAGS] = PDO::SQLITE_OPEN_READONLY;
+            // PHP 8.5 で PDO::SQLITE_* が deprecated、Pdo\Sqlite::* が導入された。
+            // 8.4 以下では Pdo\Sqlite クラスが存在しないので、定数の有無で振り分ける。
+            $attrOpenFlags = defined('Pdo\Sqlite::ATTR_OPEN_FLAGS')
+                ? constant('Pdo\Sqlite::ATTR_OPEN_FLAGS')
+                : PDO::SQLITE_ATTR_OPEN_FLAGS;
+            $openReadOnly = defined('Pdo\Sqlite::OPEN_READONLY')
+                ? constant('Pdo\Sqlite::OPEN_READONLY')
+                : PDO::SQLITE_OPEN_READONLY;
+            $options[$attrOpenFlags] = $openReadOnly;
         }
 
         $pdo = new PDO($dsn, null, null, $options);
