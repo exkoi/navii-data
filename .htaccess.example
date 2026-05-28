@@ -1,12 +1,17 @@
 # Navii Data Scraper - Apache config for shared hosting (Xserver等)
 #
+# このファイルはテンプレート。サーバーで以下を実行して .htaccess を作る:
+#   cp .htaccess.example .htaccess
+#   sed -i "s|/CHANGE_ME/navii-data/.htpasswd|$(pwd)/.htpasswd|" .htaccess
+#   htpasswd -B -c .htpasswd <ユーザー名>
+#
 # 1) Basic 認証でプロジェクトルート以下を保護
 # 2) 機密ファイルへの直アクセスを deny（保険）
 # 3) .git や .claude などの隠しディレクトリへのアクセスを 404
 # 4) index.php をデフォルトに
 #
-# 注意: AuthUserFile の絶対パスはサーバー環境ごとに書き換えること。
-#      Xserver では通常 /home/<account>/<domain>/public_html/navii-data/.htpasswd のような形になる。
+# AuthUserFile の絶対パスはサーバー環境ごとに書き換えること。
+# Xserver では通常 /home/<account>/<domain>/public_html/navii-data/.htpasswd のような形になる。
 
 AuthType Basic
 AuthName "Navii Data Scraper"
