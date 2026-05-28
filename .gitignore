@@ -1,11 +1,9 @@
 /vendor/
-/data/*.sqlite
-/data/*.sqlite-journal
-/data/*.sqlite-wal
-/data/*.sqlite-shm
-/data/.stop
-/data/.lock
-/data/logs/*.log
+/data/*
+!/data/.gitkeep
+!/data/logs/
+/data/logs/*
+!/data/logs/.gitkeep
 /tmp/*
 !/tmp/.gitkeep
 /.htpasswd
