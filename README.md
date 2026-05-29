@@ -245,7 +245,14 @@ Xserver のサーバーパネル「Cron設定」または `crontab -e` で次の
 
 # Navii Data Scraper - 詳細クロール（奇数分）
 1-59/2 * * * * cd /home/<account>/<domain>/public_html/navii-data && /usr/bin/php8.5 bin/crawl-detail.php >> data/logs/cron-detail.log 2>&1
+
+# Navii Data Scraper - DLスナップショット生成（毎時10分、他cronと時刻が衝突しない）
+10 * * * * cd /home/<account>/<domain>/public_html/navii-data && /usr/bin/php8.5 bin/make-snapshot.php >> data/logs/cron-snapshot.log 2>&1
 ```
+
+スナップショット生成は本DBに対して `VACUUM INTO` で別ファイルに整合性コピーを作る方式。
+クロール中の書き込みと並走しても安全で、`public/download/navii.sqlite` として配信される。
+ファイル差し替えは atomic rename なので、DL中のクライアントが中途半端なファイルを取ることもない。
 
 Xserver では PHP CLI のフルパスを明示するのが安全（`/usr/bin/php` のデフォルトバージョン変更時に
 影響を受けないため）。`/usr/bin/php8.5` は PHP 8.5 系の最新を指す symlink。
@@ -262,6 +269,8 @@ Xserver では PHP CLI のフルパスを明示するのが安全（`/usr/bin/ph
 | 市町村合併でマスタが古くなった | `php bin/build-municipalities.php` を再実行（UPSERTなので安全） |
 | 全消ししてやり直し | `php bin/reset-state.php --yes` |
 | 既存の非圧縮HTMLを圧縮したい | `.stop` でクロール停止 → DBバックアップ → `php bin/compress-html.php`（gzip圧縮 + VACUUM、再実行可）|
+| DLスナップショットを今すぐ更新 | `php bin/make-snapshot.php`（毎時 cron でも自動更新される）|
+| DLしたファイルが壊れていないか | `shasum -a 256` で `public/download/navii.sqlite.sha256` と照合 → `sqlite3 navii.sqlite "PRAGMA integrity_check;"` |
 
 ## HTML の取り出し（解析側）
 

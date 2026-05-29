@@ -5,10 +5,15 @@
 #   sed -i "s|/CHANGE_ME/navii-data/.htpasswd|$(pwd)/.htpasswd|" .htaccess
 #   htpasswd -B -c .htpasswd <ユーザー名>
 #
-# 1) Basic 認証でプロジェクトルート以下を保護
-# 2) 機密ファイルへの直アクセスを deny（保険）
-# 3) .git や .claude などの隠しディレクトリへのアクセスを 404
-# 4) index.php をデフォルトに
+# 構成:
+#   1) Basic 認証でプロジェクトルート以下を保護
+#   2) 内部用ディレクトリ（data/, tmp/, src/, bin/, config/, vendor/ 等）への
+#      直接アクセスを 404。本DB data/navii.sqlite はここで遮断される。
+#   3) 機密ファイル名を保険として deny（.htpasswd, .env, *.log, *.lock, *.stop）
+#   4) 隠しファイル・隠しディレクトリ（.git, .claude 等）を deny
+#   5) 公開DL用 public/download/ 配下は通す（実体は VACUUM INTO で生成した
+#      整合性スナップショット。子 .htaccess でレジューム可能DL用ヘッダを設定）
+#   6) index.php をデフォルトに
 #
 # AuthUserFile の絶対パスはサーバー環境ごとに書き換えること。
 # Xserver では通常 /home/<account>/<domain>/public_html/navii-data/.htpasswd のような形になる。
@@ -18,7 +23,12 @@ AuthName "Navii Data Scraper"
 AuthUserFile /CHANGE_ME/navii-data/.htpasswd
 Require valid-user
 
-<FilesMatch "\.(sqlite|sqlite-journal|sqlite-wal|sqlite-shm|htpasswd|htaccess|env|log|lock|stop)$">
+# 内部用ディレクトリは Web から直接見せない（本DBや内部コード・依存一式を遮断）。
+# 公開対象は index.php と public/download/ のみ。
+RedirectMatch 404 (?i)/(data|tmp|migrations|migrations-state|src|bin|config|vendor)(/|$)
+
+# 機密ファイル名は保険として deny
+<FilesMatch "\.(htpasswd|htaccess|env|log|lock|stop)$">
     Require all denied
 </FilesMatch>
 

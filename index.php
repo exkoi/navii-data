@@ -134,6 +134,34 @@ $stop = $report['stop_file'];
     <tr><th>last_changed_at</th><td><?= h($hs['last_changed_at'] ?? '') ?></td></tr>
 </table>
 
+<h2>ダウンロード</h2>
+<?php
+    $snapshotPath = __DIR__ . '/public/download/navii.sqlite';
+    $metaPath     = $snapshotPath . '.meta.json';
+    $meta = is_file($metaPath) ? json_decode((string)file_get_contents($metaPath), true) : null;
+    $baseUrl = 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
+             . rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/')
+             . '/public/download/navii.sqlite';
+?>
+<?php if (!$meta || !is_file($snapshotPath)): ?>
+    <p>(スナップショット未生成。<code>php bin/make-snapshot.php</code> を手動実行するか、毎時の cron 完了を待つ)</p>
+<?php else: ?>
+    <table border="1" cellpadding="4">
+        <tr><th>file</th><td><a href="public/download/navii.sqlite" download="navii.sqlite">navii.sqlite</a></td></tr>
+        <tr><th>size</th><td><?= h(number_format((int)$meta['size_bytes'])) ?> B (<?= h(number_format($meta['size_bytes'] / 1048576, 1)) ?> MB)</td></tr>
+        <tr><th>sha256</th><td><code style="font-size:0.85em"><?= h($meta['sha256']) ?></code> <a href="public/download/navii.sqlite.sha256">(.sha256)</a></td></tr>
+        <tr><th>rows_with_html</th><td><?= h(number_format((int)$meta['rows_with_html'])) ?></td></tr>
+        <tr><th>rows_total</th><td><?= h(number_format((int)$meta['rows_total'])) ?></td></tr>
+        <tr><th>generated_at</th><td><?= h($meta['generated_at']) ?></td></tr>
+        <tr><th>last_scraped_at</th><td><?= h($meta['last_scraped_at'] ?? '') ?></td></tr>
+    </table>
+    <p><strong>推奨：curl でレジューム可能 DL → SHA-256 照合</strong></p>
+<pre>curl -u USER:PASS --fail -C - -o navii.sqlite \
+  "<?= h($baseUrl) ?>"
+shasum -a 256 navii.sqlite   # 上の sha256 と一致するか確認
+sqlite3 navii.sqlite "PRAGMA integrity_check;"   # ok を確認</pre>
+<?php endif; ?>
+
 <h2>recent fetches (latest 20)</h2>
 <?php if (!$report['recent_fetches']): ?>
     <p>(no fetches yet)</p>

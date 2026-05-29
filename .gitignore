@@ -6,6 +6,10 @@
 !/data/logs/.gitkeep
 /tmp/*
 !/tmp/.gitkeep
+/public/download/navii.sqlite
+/public/download/navii.sqlite.sha256
+/public/download/navii.sqlite.meta.json
+/public/download/navii.sqlite.tmp
 /.htpasswd
 /.htaccess
 .env

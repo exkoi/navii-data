@@ -1,0 +1,21 @@
+# DL配信ディレクトリ
+#
+# 親の Basic 認証は継承される。ここでは DL 用のレスポンスヘッダだけ追加する。
+# 実体は make-snapshot.php が VACUUM INTO + integrity_check で生成した整合性
+# スナップショット（navii.sqlite, .sha256, .meta.json）。
+# Apache が Range / Accept-Ranges / ETag / Last-Modified を自動で扱うので、
+# curl -C - などでレジューム可能DLが可能。
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.sqlite$">
+        Header set Content-Type "application/x-sqlite3"
+        Header set Content-Disposition "attachment; filename=\"navii.sqlite\""
+        Header set Cache-Control "no-cache, must-revalidate"
+    </FilesMatch>
+
+    <FilesMatch "\.(sha256|json)$">
+        Header set Cache-Control "no-cache, must-revalidate"
+    </FilesMatch>
+
+    Header set Accept-Ranges "bytes"
+</IfModule>
