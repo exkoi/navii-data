@@ -64,12 +64,19 @@ try {
     }
 
     // 1) 整合性スナップショットを別ファイルに書き出す。
-    //    本DBへのクロール書き込みは並走可能（読み取りの共有ロックのみ取る）。
-    $pdo = new PDO('sqlite:' . $src);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $escaped = str_replace("'", "''", $tmp);
-    $pdo->exec("VACUUM INTO '{$escaped}'");
-    $pdo = null;
+    //    SQLite の Online Backup API を ext-sqlite3 経由で呼ぶ。
+    //    VACUUM INTO は 3.27.0+ 限定なので、共有レンタル等で古い SQLite が
+    //    入っていても動くよう backup() を使う。本DBへの書き込みは並走可能。
+    $srcSql = new SQLite3($src, SQLITE3_OPEN_READONLY);
+    $dstSql = new SQLite3($tmp, SQLITE3_OPEN_CREATE | SQLITE3_OPEN_READWRITE);
+    try {
+        if (!$srcSql->backup($dstSql)) {
+            throw new RuntimeException('SQLite3::backup() returned false');
+        }
+    } finally {
+        $dstSql->close();
+        $srcSql->close();
+    }
 
     if (!is_file($tmp)) {
         throw new RuntimeException('VACUUM INTO completed but output file missing');

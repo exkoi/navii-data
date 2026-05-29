@@ -6,6 +6,7 @@
     "require": {
         "php": ">=8.2",
         "ext-pdo_sqlite": "*",
+        "ext-sqlite3": "*",
         "ext-dom": "*",
         "ext-zlib": "*",
         "ext-mbstring": "*",
