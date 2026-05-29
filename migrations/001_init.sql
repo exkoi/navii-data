@@ -1,17 +1,17 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
--- 施設マスター（1施設1レコード、最新HTMLを raw BLOB で保持）
+-- 施設マスター（1施設1レコード、最新HTMLを gzip圧縮BLOB で保持）
 -- このDBは配布物そのものなので、運用メタ（list_progress / fetch_log）は state DB 側に置く。
 CREATE TABLE IF NOT EXISTS facilities (
   kikan_cd        TEXT NOT NULL,
   pref_cd         TEXT NOT NULL,
   kikan_kbn       TEXT NOT NULL,
 
-  -- HTMLスナップショット（生HTML、非圧縮 BLOB）
+  -- HTMLスナップショット（生HTMLを gzip圧縮した BLOB。HtmlCodec で encode/decode）
   html            BLOB,
-  content_hash    TEXT,                 -- 正規化後HTMLのsha256（差分判定用）
-  bytes           INTEGER,               -- 生HTMLのバイト数
+  content_hash    TEXT,                 -- 正規化後HTMLのsha256（差分判定用・圧縮前に算出）
+  bytes           INTEGER,               -- 生HTML（圧縮前）のバイト数
   http_status     INTEGER,
 
   -- タイムスタンプ

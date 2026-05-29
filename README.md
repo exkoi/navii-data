@@ -121,7 +121,7 @@ php bin/reset-state.php --yes --keep-html  # facilities と html は残してス
 
 | テーブル | 役割 |
 |---|---|
-| `facilities` | 1施設1レコード。詳細ページの **生HTML（非圧縮 BLOB）** + メタ情報 + ステータスをすべてここに集約。これだけが配布対象 |
+| `facilities` | 1施設1レコード。詳細ページの **生HTML（gzip圧縮 BLOB）** + メタ情報 + ステータスをすべてここに集約。これだけが配布対象 |
 
 `facilities` 主要カラム：
 
@@ -129,8 +129,8 @@ php bin/reset-state.php --yes --keep-html  # facilities と html は残してス
 |---|---|
 | `kikan_cd`, `pref_cd`, `kikan_kbn` | 主キー（複合） |
 | `code5` | e-Stat 標準地域コード（5桁、クロール起点の lo の後5桁） |
-| `html` | 詳細ページの生HTML（BLOB、非圧縮） |
-| `content_hash` | 正規化済みHTMLの sha256（差分判定用） |
+| `html` | 詳細ページの生HTML（gzip圧縮 BLOB）。`HtmlCodec::decode()` で展開して使う。構造は可逆に完全保持 |
+| `content_hash` | 正規化済みHTMLの sha256（差分判定用・圧縮前に算出） |
 | `bytes`, `http_status` | 取得時のメタ |
 | `first_seen_at` / `last_seen_at` | 一覧で見つけた最初／最新の時刻 |
 | `last_scraped_at` | 詳細ページを取得した最新時刻 |
@@ -261,6 +261,19 @@ Xserver では PHP CLI のフルパスを明示するのが安全（`/usr/bin/ph
 | 連続エラーで進まない | `bin/status.php` で `fetch_log` のエラー内容を確認 → 原因対処 → `.stop` 削除 → 必要に応じて `UPDATE facilities SET status='pending', retry_count=0 WHERE status='error'` |
 | 市町村合併でマスタが古くなった | `php bin/build-municipalities.php` を再実行（UPSERTなので安全） |
 | 全消ししてやり直し | `php bin/reset-state.php --yes` |
+| 既存の非圧縮HTMLを圧縮したい | `.stop` でクロール停止 → DBバックアップ → `php bin/compress-html.php`（gzip圧縮 + VACUUM、再実行可）|
+
+## HTML の取り出し（解析側）
+
+`html` カラムは gzip 圧縮 BLOB。**SQLite の組み込み関数だけでは展開できない**ので、解析側で展開する：
+
+| 言語 | 展開 |
+|---|---|
+| PHP | `Exp\NaviiData\HtmlCodec::decode($blob)`（圧縮/非圧縮を自動判別）または `gzdecode($blob)` |
+| Python | `gzip.decompress(blob)` |
+| Node.js | `require('zlib').gunzipSync(blob)` |
+
+先頭2バイトが gzip マジック（`0x1f 0x8b`）なら圧縮済み。移行前の非圧縮データが混在しても `HtmlCodec::decode()` はそのまま返す。
 
 ## 利用規約上の留意
 

@@ -8,6 +8,7 @@ date_default_timezone_set('Asia/Tokyo');
 
 use Exp\NaviiData\CircuitBreaker;
 use Exp\NaviiData\Db;
+use Exp\NaviiData\HtmlCodec;
 use Exp\NaviiData\HtmlNormalizer;
 use Exp\NaviiData\HttpClient;
 use Exp\NaviiData\Logger;
@@ -128,7 +129,8 @@ foreach ($jobs as $idx => $job) {
                 WHERE kikan_cd = :cd AND pref_cd = :pref AND kikan_kbn = :kbn';
 
         $upd = $pdo->prepare($sql);
-        $upd->bindValue(':html', $result['body'], PDO::PARAM_LOB);
+        // html は gzip圧縮して保存（構造は可逆に完全保持）。bytes は生HTMLのバイト数のまま。
+        $upd->bindValue(':html', HtmlCodec::encode($result['body']), PDO::PARAM_LOB);
         $upd->bindValue(':hash', $hash);
         $upd->bindValue(':bytes', $result['bytes'], PDO::PARAM_INT);
         $upd->bindValue(':status', $result['status'], PDO::PARAM_INT);
