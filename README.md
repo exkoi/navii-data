@@ -25,20 +25,24 @@
 │   ├── init-db.php
 │   ├── build-municipalities.php  # 市区町村マスタを e-Stat SPARQL から取得
 │   ├── crawl-list.php            # 市区町村 (lo) 単位で一覧クロール
-│   ├── crawl-detail.php          # 詳細ページHTMLをスナップショット保存
+│   ├── crawl-detail.php          # 詳細ページHTMLをスナップショット保存（gzip圧縮）
+│   ├── compress-html.php         # 既存の非圧縮HTMLを gzip 圧縮するワンショット移行
+│   ├── make-snapshot.php         # DL配信用snapshotを生成（cron で毎時実行）
 │   ├── status.php                # 進捗確認（CLI）
 │   └── reset-state.php           # テスト用全消し（要 --yes）
-├── src/                        # PSR-4 (Exp\NaviiData\)
+├── src/                        # PSR-4 (Exp\NaviiData\)。HtmlCodec, HtmlNormalizer, StatusReport ほか
 ├── config/                     # 設定（env優先）
 ├── migrations/                 # 配布DB（facilities）のスキーマ
 ├── migrations-state/           # 運用DB（state）のスキーマ
-├── data/                       # SQLite DB、ロック、停止フラグ、ログ（gitignore）
-│   ├── navii.sqlite              # 配布対象（facilities のみ）
+├── data/                       # SQLite DB、ロック、停止フラグ、ログ（gitignore、Web非公開）
+│   ├── navii.sqlite              # 配布対象本体（クロールが書き込む側、Web から直接配信しない）
 │   ├── navii-state.sqlite        # 運用専用（municipalities / list_progress / fetch_log）
 │   └── logs/
+├── public/                     # Web から到達可能な唯一の領域
+│   └── download/                 # DL用snapshot（navii.sqlite + .sha256 + .meta.json、gitignore）
 ├── tmp/                        # サンプルHTML置き場
 ├── index.php                   # Web進捗ダッシュボード（Basic認証必須）
-├── .htaccess.example           # Basic認証＋機密ファイル deny のテンプレート
+├── .htaccess.example           # Basic認証＋ディレクトリ単位 404 のテンプレート
 └── .htpasswd.example
 ```
 
@@ -151,10 +155,14 @@ PHP からは main DB を開く時に `ATTACH DATABASE ... AS state` で両方�
 ### 設計方針
 
 - **1施設1レコード**。最新のHTMLだけを保持（履歴は持たない）
-- **生HTML を BLOB のまま保存**（一次ソースとしてダウンロードして使う用途のため、加工しない）
-- 差分判定は `?timeAt=...` キャッシュバスタータイムスタンプと `_csrf` トークンを除いた正規化済みHTMLの sha256 を比較（`src/HtmlNormalizer.php`）
+- **生HTML を gzip圧縮 BLOB として保存**（一次ソース・構造保持・配布サイズ削減を両立。実測で約89%減）。
+  圧縮/展開は `src/HtmlCodec.php` に集約、`decode()` は gzip マジックバイトで圧縮/非圧縮を自動判別するので
+  移行期の混在も後方互換
+- 差分判定は `?timeAt=...` キャッシュバスタータイムスタンプと `_csrf` トークンを除いた正規化済みHTMLの sha256 を比較（`src/HtmlNormalizer.php`）。**正規化と hash 算出は圧縮前の生HTMLに対して行う**
 - HTML が変化していなくても `last_scraped_at` は毎回更新、変化した時だけ `last_changed_at` を更新
 - **配布物の軽量化のため facilities だけを別DBに**。`navii-state.sqlite` は配布時にコピー不要
+- **本DBはWebから直接配信しない**。クロール書き込みと並走しても安全な整合性スナップショットを
+  `public/download/navii.sqlite` に別途生成して配信する（後述「配信パイプライン」参照）
 
 ### DBダウンロード後の使い方例
 
@@ -201,7 +209,53 @@ SELECT COUNT(*) FROM facilities WHERE html IS NULL;
 - **連続エラー閾値**: 5件連続失敗で `.stop` 自動作成（`CircuitBreaker`）
 - **差分のみ取得**: 同一HTMLなら snapshot を追記しない
 
-## レンタルサーバー（Xserver等）への配置
+## 配信パイプライン (`public/download/`)
+
+DL 用 SQLite ファイルは本DB（`data/navii.sqlite`）を**直接配信せず**、別ファイルへ整合性スナップショット
+を作って配信する。`bin/make-snapshot.php` が cron で毎時 1 回これを生成する。
+
+### 仕組み
+
+```
+data/navii.sqlite                      ← クロールが書き込む本DB（Web非公開）
+       │
+       │  SQLite Online Backup API (SQLite3::backup)
+       ▼
+public/download/navii.sqlite.tmp       ← 整合性スナップショット
+       │  PRAGMA integrity_check が ok のときだけ
+       ▼  atomic rename
+public/download/navii.sqlite           ← 配信本体
+public/download/navii.sqlite.sha256    ← 整合性検証用
+public/download/navii.sqlite.meta.json ← サイズ・件数・generated_at
+```
+
+### 設計上の重要ポイント（変更前に必ず読む）
+
+- **`VACUUM INTO` は使わない**。Xserver の `/usr/bin/php8.5` にバンドルされた SQLite は **3.26.0** で、
+  `VACUUM INTO` 構文（3.27.0+）は syntax error になる。代わりに `ext-sqlite3` の
+  `SQLite3::backup()`（**Online Backup API**）を使う。本DBへの書き込みと並走しても安全
+- **`PRAGMA integrity_check` で `ok` でなければ rename しない**。壊れたスナップショットは絶対に配信に出さない
+- **atomic rename** で公開ファイルを差し替えるので、DL中のクライアントが中途半端なファイルを掴むことはない
+- **`flock(LOCK_EX | LOCK_NB)`** で多重起動防止。前回の生成が時間内に終わらなくても次回 cron は即終了
+- 失敗時は旧スナップショットがそのまま残る（鮮度は落ちるが配信は止まらない）
+- `bytes` カラム・`content_hash` は**圧縮前の生HTML基準のまま**。snapshot を作る側では一切いじらない
+
+### Webアクセス制御 (`.htaccess`)
+
+`public_html/navii-data/.htaccess` で：
+
+- **プロジェクト全体に Basic 認証**（`Require valid-user`）
+- **内部ディレクトリへの直アクセスは `RedirectMatch 404`** で遮断：
+  `data/`, `tmp/`, `migrations/`, `migrations-state/`, `src/`, `bin/`, `config/`, `vendor/`
+  → 本DB `data/navii.sqlite` は**この防御で隠される**（拡張子単位の deny ではなく**ディレクトリ単位**にしている
+  のは、`public/download/navii.sqlite` を例外として通すため）
+- `public/download/.htaccess` で `Content-Disposition`, `Accept-Ranges` 等を設定。実体配信は Apache に
+  任せるので **Range / レジューム可能 DL** が curl `-C -` で使える
+
+認証なしでは内部の404判定までApacheが到達しないので全部401になる（外部からの構造漏洩なし）。
+認証通過後でも `data/`, `src/`, `config/` 配下は 404 で返る（実機確認済み）。
+
+
 
 ### 1. アップロード
 
@@ -229,10 +283,20 @@ php bin/build-municipalities.php
 ### 4. Web 動作確認
 
 ブラウザで `https://<ドメイン>/navii-data/` にアクセス → Basic 認証ダイアログ → 認証成功で
-進捗ダッシュボードが表示されることを確認。
+進捗ダッシュボードが表示されることを確認。ページ下部に「ダウンロード」セクションが出ていれば、
+DL用snapshot も正しく生成されている（無ければ `php bin/make-snapshot.php` を1回手動で叩く）。
 
-`/navii-data/data/navii.sqlite` への直アクセスが 403 になることも確認（`.htaccess` の `FilesMatch` が
-sqlite ファイルを deny する）。
+内部ディレクトリ遮断の確認：
+
+```bash
+# 認証なしでは全部 401（外部から構造が漏れない）
+curl -sI -o /dev/null -w "%{http_code}\n" https://<ドメイン>/navii-data/data/navii.sqlite        # → 401
+# 認証ありでも data/, src/, config/ 配下は 404（RedirectMatch 404）
+curl -u USER:PASS -sI -o /dev/null -w "%{http_code}\n" https://<ドメイン>/navii-data/data/navii.sqlite        # → 404
+curl -u USER:PASS -sI -o /dev/null -w "%{http_code}\n" https://<ドメイン>/navii-data/data/navii-state.sqlite  # → 404
+# 公開snapshotだけが認証通過後にDL可能
+curl -u USER:PASS -sI -o /dev/null -w "%{http_code}\n" https://<ドメイン>/navii-data/public/download/navii.sqlite  # → 200
+```
 
 ### 5. cron 設定
 
@@ -250,9 +314,10 @@ Xserver のサーバーパネル「Cron設定」または `crontab -e` で次の
 10 * * * * cd /home/<account>/<domain>/public_html/navii-data && /usr/bin/php8.5 bin/make-snapshot.php >> data/logs/cron-snapshot.log 2>&1
 ```
 
-スナップショット生成は本DBに対して `VACUUM INTO` で別ファイルに整合性コピーを作る方式。
-クロール中の書き込みと並走しても安全で、`public/download/navii.sqlite` として配信される。
+スナップショット生成は `SQLite3::backup()`（SQLite Online Backup API）で別ファイルに整合性コピーを
+作る方式。クロール中の書き込みと並走しても安全で、`public/download/navii.sqlite` として配信される。
 ファイル差し替えは atomic rename なので、DL中のクライアントが中途半端なファイルを取ることもない。
+詳細は前掲「配信パイプライン」を参照。
 
 Xserver では PHP CLI のフルパスを明示するのが安全（`/usr/bin/php` のデフォルトバージョン変更時に
 影響を受けないため）。`/usr/bin/php8.5` は PHP 8.5 系の最新を指す symlink。
