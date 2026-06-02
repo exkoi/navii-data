@@ -11,7 +11,7 @@ return [
     'sleep_max_sec'   => (int)(getenv('NAVII_SLEEP_MAX') ?: 10),
     'max_per_run'     => (int)(getenv('NAVII_MAX_PER_RUN') ?: 10),
 
-    'target_prefs'    => array_filter(explode(',', (string)(getenv('NAVII_TARGET_PREFS') ?: '13'))),
+    'target_prefs'    => array_filter(explode(',', (string)(getenv('NAVII_TARGET_PREFS') ?: implode(',', array_map(fn($i) => sprintf('%02d', $i), range(1, 47)))))),
     'target_kbns'     => array_filter(explode(',', (string)(getenv('NAVII_TARGET_KBNS') ?: '2'))),
 
     // 一覧検索パラメータ
