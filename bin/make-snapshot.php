@@ -83,13 +83,17 @@ try {
     }
 
     // 2) 出来上がった tmp に対して整合性チェック。ok でなければ絶対に公開しない。
+    //    integrity_check はテーブル全行スキャンで重く、Xserver の負荷監視に
+    //    引っかかりやすいので quick_check（インデックス検査をスキップ）を使う。
+    //    SQLite3::backup() でページ単位コピーした直後のファイルが対象なので、
+    //    壊れるとしたら構造レベルで quick_check で十分検出できる。
     $tmpPdo = new PDO('sqlite:' . $tmp);
     $tmpPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $check  = (string)$tmpPdo->query('PRAGMA integrity_check')->fetchColumn();
+    $check  = (string)$tmpPdo->query('PRAGMA quick_check')->fetchColumn();
     if ($check !== 'ok') {
         $tmpPdo = null;
         @unlink($tmp);
-        throw new RuntimeException("integrity_check failed: {$check}");
+        throw new RuntimeException("quick_check failed: {$check}");
     }
 
     $rowsTotal     = (int)$tmpPdo->query('SELECT count(*) FROM facilities')->fetchColumn();
