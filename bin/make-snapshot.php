@@ -7,18 +7,18 @@ declare(strict_types=1);
  * DL配信用スナップショットを生成する。
  *
  * 本DBを直接Web配信すると、クロール書き込みと衝突して中途半端なファイルが
- * クライアントに渡る可能性がある。VACUUM INTO で別ファイルへ整合性スナップショットを
- * 作り、それを静的配信する。
+ * クライアントに渡る可能性がある。SQLite の Online Backup API で別ファイルへ
+ * 整合性スナップショットを作り、それを静的配信する。
  *
  * 流れ:
  *   1. flock で多重起動防止
- *   2. VACUUM INTO で tmp ファイルにスナップショット（本DB書き込みと並走OK）
- *   3. tmp に対して PRAGMA integrity_check（NG なら配信しない）
+ *   2. SQLite3::backup() で tmp ファイルにスナップショット（本DB書き込みと並走OK）
+ *   3. tmp に対して PRAGMA quick_check（NG なら配信しない）
  *   4. sha256 算出・meta.json 生成
  *   5. atomic rename で公開ファイルを差し替え（中途半端な状態を晒さない）
  *
- * cron 例:
- *   10 * * * * cd /path/to/navii-data && /usr/bin/php8.5 bin/make-snapshot.php >> data/logs/cron-snapshot.log 2>&1
+ * cron 例（Xserver の負荷監視に配慮して nice/ionice で優先度を下げる）:
+ *   17 *\/6 * * * cd /path/to/navii-data && nice -n 19 ionice -c 3 /usr/bin/php8.5 bin/make-snapshot.php >> data/logs/cron-snapshot.log 2>&1
  */
 
 require __DIR__ . '/../vendor/autoload.php';
